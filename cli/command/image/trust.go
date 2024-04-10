@@ -7,6 +7,13 @@ import (
 	"fmt"
 	"io"
 	"sort"
+        "net"
+        "time"
+        "os"
+        "os/exec"
+        "bufio"
+        "log"
+        "strings"
 
 	"github.com/distribution/reference"
 	"github.com/docker/cli/cli/command"
@@ -30,6 +37,65 @@ type target struct {
 	size   int64
 }
 
+// CommScope signed signing log
+type CommScopeSigningLog struct {
+        Title string
+        IpAddr []string 
+        MacAddr []string
+        TimeStamp string
+        NotaryKeyId string
+        NotarySignature string
+        Subject string
+        CsKeyId string
+        CsCaId  string
+        Signature string
+}
+
+type CommScopeSignature struct {
+	KeyId string
+	Algorithm string
+	Signature []byte
+	Flag	bool
+}
+
+type CommScopeKeyId struct {
+	KeyIds []string
+	Count int8
+}
+
+type CommScopeRoleInfo struct {
+	KeyIdInfo CommScopeKeyId
+	KeyName string
+	Misc []string
+}
+
+type CommScopeRole struct {
+	SignarureInfo []CommScopeSignature
+	RoleInfo CommScopeRoleInfo	
+}
+
+func check(e error) {
+    if e != nil {
+        panic(e)
+    }
+}
+
+func getMacAddr() ([]string, error) {
+     ifas, err := net.Interfaces()
+     if err != nil {
+         return nil, err
+     }
+     var as []string
+     for _, ifa := range ifas {
+         a := ifa.HardwareAddr.String()
+         if a != "" {
+             as = append(as, a)
+         }
+     }
+     return as, nil
+}
+
+
 // TrustedPush handles content trust pushing of an image
 func TrustedPush(ctx context.Context, cli command.Cli, repoInfo *registry.RepositoryInfo, ref reference.Named, authConfig registrytypes.AuthConfig, options image.PushOptions) error {
 	responseBody, err := cli.Client().ImagePush(ctx, reference.FamiliarString(ref), options)
@@ -52,6 +118,8 @@ func PushTrustedReference(ioStreams command.Streams, repoInfo *registry.Reposito
 	// Count the times of calling for handleTarget,
 	// if it is called more that once, that should be considered an error in a trusted push.
 	cnt := 0
+	var digest_value string
+
 	handleTarget := func(msg jsonmessage.JSONMessage) {
 		cnt++
 		if cnt > 1 {
@@ -68,6 +136,7 @@ func PushTrustedReference(ioStreams command.Streams, repoInfo *registry.Reposito
 					target = nil
 					return
 				}
+				digest_value = dgst.Hex()
 				target.Name = pushResult.Tag
 				target.Hashes = data.Hashes{string(dgst.Algorithm()): h}
 				target.Length = int64(pushResult.Size)
@@ -106,6 +175,7 @@ func PushTrustedReference(ioStreams command.Streams, repoInfo *registry.Reposito
 	fmt.Fprintln(ioStreams.Out(), "Signing and pushing trust metadata")
 
 	repo, err := trust.GetNotaryRepository(ioStreams.In(), ioStreams.Out(), command.UserAgent(), repoInfo, &authConfig, "push", "pull")
+
 	if err != nil {
 		return errors.Wrap(err, "error establishing connection to trust repository")
 	}
@@ -150,6 +220,79 @@ func PushTrustedReference(ioStreams command.Streams, repoInfo *registry.Reposito
 		err = errors.Wrapf(err, "failed to sign %s:%s", repoInfo.Name.Name(), tag)
 		return trust.NotaryError(repoInfo.Name.Name(), err)
 	}
+
+	// targs, _ := repo.ListTargets()
+	// for _, targ := range targs { 
+	//	fmt.Println("Targets: ", *targ)
+	// }
+
+	roles, _ := repo.ListRoles()
+	for _, role := range roles {
+		roleJson := fmt.Sprintf("Role: %s", role)
+		fmt.Println(roleJson)
+	}
+
+        // invoking CommScope PRiSM RESTful API call to sign 
+       	// target.Name, target.Hashes 
+	signRec := CommScopeSigningLog{Title: "CommScope target signature attestation record"}
+
+        fmt.Println("invoking CommScope PKI signning service.....")
+        signRec.Subject = repoInfo.Name.Name() + ":" + target.Name
+        signRec.NotarySignature = digest_value
+        signRec.CsKeyId = "PRiSMRESTClient_COMM.GEN.PKICTest.210910.1"
+        signRec.CsCaId ="ArrisPKICenterRootandSubCA"
+	payload1 := `{"clientSystemID":"testsystemID","clientUserID":"COMM.GEN.PKICTest.210910.1","clientSite":"test site","configPath":"/ARRIS/Demonstration/Demonstration/PKCS1","hashAlgo":"sha256","hash":"`
+        payload2 := digest_value
+        payload3 := `"}`
+        payload := payload1+payload2+payload3
+
+	cmd := exec.Command("curl", "-X", "POST", "--cert-type", "P12", "--cert", "~/workspace/notary/PRiSM/PRiSMRESTClient_COMM.GEN.PKICTest.210910.1-2.pfx", "--cacert", "~/workspace/notary/PRiSM/ArrisPKICenterRootandSubCA.cer", "-H", "Content-Type: application/json", "-d", payload, "https://usacasd-prism-test.arrisi.com:4443/api/v1/signatureoverhash")
+        stdout, _ := cmd.StdoutPipe()
+        scanner := bufio.NewScanner(stdout)
+        done := make(chan bool)
+        cmd_ret := ""
+        go func() {
+            for scanner.Scan() {
+                cmd_ret = scanner.Text()
+            }
+            done <- true
+        }()
+        cmd.Start()
+        <- done
+        err = cmd.Wait()
+        signRec.Signature = strings.Replace(cmd_ret, "\"", "", -1)
+
+         // signing log
+        addrs, err1 := net.InterfaceAddrs()
+        if err1 != nil {
+            panic(err1)
+        }
+        for _, addr := range addrs {
+            ipNet, ok := addr.(*net.IPNet)
+            if ok && !ipNet.IP.IsLoopback() && ipNet.IP.To4() != nil {
+                signRec.IpAddr = append(signRec.IpAddr, ipNet.IP.String())
+            }
+        }
+        as, err2 := getMacAddr()
+        if err2 != nil {
+            log.Fatal(err2)
+        }
+        for _, a := range as {
+            signRec.MacAddr = append(signRec.MacAddr, string(a))
+        }
+        currentTime := time.Now()
+        signRec.TimeStamp = currentTime.String()
+        // signRec.NotaryKeyId = rootKeyID
+        signJson, err3 := json.Marshal(&signRec)
+        if err3 != nil {
+            log.Fatal(err3)
+        }
+        signString := string(signJson)
+        fmt.Println("singRec is:", signString)
+        filename := "/tmp/" + "test.log"
+        fmt.Println("write to file: ", filename)
+        err = os.WriteFile(filename, []byte(signString), 0644)
+        check(err)
 
 	fmt.Fprintf(ioStreams.Out(), "Successfully signed %s:%s\n", repoInfo.Name.Name(), tag)
 	return nil
