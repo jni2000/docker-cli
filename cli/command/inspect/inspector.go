@@ -24,6 +24,8 @@ type Inspector interface {
 	Inspect(typedElement any, rawElement []byte) error
 	// Flush writes the result of inspecting all elements into the output stream.
 	Flush() error
+	// inspect extension
+	InspectExtension() error
 }
 
 // TemplateInspector uses a text template to inspect elements.
@@ -89,6 +91,10 @@ func Inspect(out io.Writer, references []string, tmplStr string, getRef GetRefFu
 		logrus.Errorf("%s\n", err)
 	}
 
+	if err := inspector.InspectExtension(); err != nil {
+                logrus.Errorf("%s\n", err)
+        }
+
 	if len(inspectErrs) != 0 {
 		return cli.StatusError{
 			StatusCode: 1,
@@ -147,6 +153,11 @@ func (i *TemplateInspector) Flush() error {
 
 	return err
 }
+
+func (i *TemplateInspector) InspectExtension() error {
+	_, err := io.WriteString(i.outputStream, "\n") 
+        return err
+} 
 
 // NewIndentedInspector generates a new inspector with an indented representation
 // of elements.
@@ -219,24 +230,61 @@ func (e *elementsInspector) Flush() error {
 		buffer = bytes.NewReader(b)
 	}
 
-	result := new(strings.Builder)
-        _, err := io.Copy(result, buffer)
-	resultStr := result.String()
-	subStr := "\"Digest\": \""
-	index := strings.Index(resultStr, subStr)
-	digest := resultStr[(index+len(subStr)):(index+len(subStr)+64)]
-	filename := "/tmp/" + digest + ".log"
-	if _, err = os.Stat(filename); err == nil {
-            fmt.Println("CommScope PRiSM signature found & verified!")
-	    fmt.Println("The following Docker trust inspection result is verified!")
-            fmt.Println(resultStr)
-            if _, err = io.Copy(e.outputStream, buffer); err != nil {
-                    return err
-            }
-            _, err = io.WriteString(e.outputStream, "\n")
-        } else {
-            fmt.Println("CommScope PRiSM signature not found or verification failed!")
+	if _, err := io.Copy(e.outputStream, buffer); err != nil {
+		return err
+	}
+	_, err := io.WriteString(e.outputStream, "\n")
+        return err
+}
+
+
+func (e *elementsInspector) InspectExtension() error {
+        if len(e.elements) == 0 && len(e.rawElements) == 0 {
+                _, err := io.WriteString(e.outputStream, "Inspect plugin invoking error.\n")
+                return err
         }
 
+        var buffer io.Reader
+        if len(e.rawElements) > 0 {
+                bytesBuffer := new(bytes.Buffer)
+                bytesBuffer.WriteString("[")
+                for idx, r := range e.rawElements {
+                        bytesBuffer.Write(r)
+                        if idx < len(e.rawElements)-1 {
+                                bytesBuffer.WriteString(",")
+                        }
+                }
+                bytesBuffer.WriteString("]")
+                output := new(bytes.Buffer)
+                if err := e.raw(output, bytesBuffer.Bytes()); err != nil {
+                        return err
+                }
+                buffer = output
+   
+		result := new(strings.Builder)
+        	_, err := io.Copy(result, buffer)
+		resultStr := result.String()
+		subStr := "\"Digest\": \""
+		index := strings.Index(resultStr, subStr)
+		if index >= 0 {
+			digest := resultStr[(index+len(subStr)):(index+len(subStr)+64)]
+			filename := "/tmp/" + digest + ".log"
+			// fmt.Println(resultStr)
+			// fmt.Println(filename)
+
+			if _, err = os.Stat(filename); err == nil {
+            			fmt.Println("CommScope PRiSM signature found & verified!")
+	    			fmt.Println("The following Docker trust inspection result is verified!")
+            			fmt.Println(resultStr)
+            			if _, err = io.Copy(e.outputStream, buffer); err != nil {
+                    			return err
+            			}
+            		_, err = io.WriteString(e.outputStream, "\n")
+        		} else {
+            			fmt.Println("CommScope PRiSM signature not found or verification failed!")
+        		}
+		}
+        } 
+         _, err := io.WriteString(e.outputStream, "")
 	return err
 }
