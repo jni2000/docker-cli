@@ -64,6 +64,8 @@ func runInspect(ctx context.Context, dockerCLI command.Cli, opts inspectOptions)
 		i, err := getRepoTrustInfo(ctx, dockerCLI, ref)
 		return nil, i, err
 	}
+	fmt.Println("Invoking CommScope Attestation....")
+
 	return inspect.Inspect(dockerCLI.Out(), opts.remotes, "", getRefFunc)
 }
 

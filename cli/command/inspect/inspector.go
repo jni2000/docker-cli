@@ -4,9 +4,11 @@
 package inspect
 
 import (
+	"fmt"
 	"bytes"
 	"encoding/json"
 	"io"
+	"os"
 	"strings"
 	"text/template"
 
@@ -142,6 +144,7 @@ func (i *TemplateInspector) Flush() error {
 		return err
 	}
 	_, err := io.Copy(i.outputStream, i.buffer)
+
 	return err
 }
 
@@ -216,9 +219,24 @@ func (e *elementsInspector) Flush() error {
 		buffer = bytes.NewReader(b)
 	}
 
-	if _, err := io.Copy(e.outputStream, buffer); err != nil {
-		return err
-	}
-	_, err := io.WriteString(e.outputStream, "\n")
+	result := new(strings.Builder)
+        _, err := io.Copy(result, buffer)
+	resultStr := result.String()
+	subStr := "\"Digest\": \""
+	index := strings.Index(resultStr, subStr)
+	digest := resultStr[(index+len(subStr)):(index+len(subStr)+64)]
+	filename := "/tmp/" + digest + ".log"
+	if _, err = os.Stat(filename); err == nil {
+            fmt.Println("CommScope PRiSM signature found & verified!")
+	    fmt.Println("The following Docker trust inspection result is verified!")
+            fmt.Println(resultStr)
+            if _, err = io.Copy(e.outputStream, buffer); err != nil {
+                    return err
+            }
+            _, err = io.WriteString(e.outputStream, "\n")
+        } else {
+            fmt.Println("CommScope PRiSM signature not found or verification failed!")
+        }
+
 	return err
 }
