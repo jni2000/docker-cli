@@ -274,8 +274,8 @@ func (e *elementsInspector) InspectExtension() error {
 
 			if _, err = os.Stat(filename); err == nil {
             			fmt.Println("CommScope PRiSM signature found & verified!")
-	    			fmt.Println("The following Docker trust inspection result is verified!")
-            			fmt.Println(resultStr)
+	    			fmt.Println("The above Docker trust inspection result is verified!")
+            			// fmt.Println(resultStr)
             			if _, err = io.Copy(e.outputStream, buffer); err != nil {
                     			return err
             			}

@@ -275,7 +275,7 @@ func PushTrustedReference(ioStreams command.Streams, repoInfo *registry.Reposito
         payload3 := `"}`
         payload := payload1+payload2+payload3
 
-	cmd := exec.Command("curl", "-X", "POST", "--cert-type", "P12", "--cert", "/home/jamesni/workspace/notary/PRiSM/PRiSMRESTClient_COMM.GEN.PKICTest.210910.1-2.pfx", "--cacert", "/home/jamesni/workspace/notary/PRiSM/ArrisPKICenterRootandSubCA.cer", "-H", "Content-Type: application/json", "-d", payload, "https://usacasd-prism-test.arrisi.com:4443/api/v1/signatureoverhash")
+	cmd := exec.Command("curl", "-X", "POST", "--cert-type", "P12", "--cert", "/home/jamesni/workspace/notary/PRiSM/PRiSMRESTClient_COMM.GEN.PKICTest.210910.1-2.pfx", "--cacert", "/home/jamesni/workspace/notary/PRiSM/ArrisPKICenterRootandSubCA.cer", "-H", "Content-Type: application/json", "-d", payload, "https://iPRiSM.staging.pki-center.com:4443/api/v1/signatureoverhash")
         stdout, err_x := cmd.StdoutPipe()
 	if err_x != nil {
 		log.Fatal(err_x)
