@@ -255,12 +255,12 @@ func PushTrustedReference(ioStreams command.Streams, repoInfo *registry.Reposito
 	home := os.Getenv("HOME")
 
 	fmt.Println("Current working directory:", directory, home)
-        if _, err = os.Stat("/home/jamesni/workspace/notary/PRiSM/PRiSMRESTClient_COMM.GEN.PKICTest.210910.1-2.pfx"); err == nil {
+        if _, err = os.Stat("/var/lib/jenkins/workspace/simplehttpserver/docker-cli/build/PRiSM/PRiSMRESTClient_COMM.GEN.PKICTest.210910.1-2.pfx"); err == nil {
         	fmt.Println("file PRiSM/PRiSMRESTClient_COMM.GEN.PKICTest.210910.1-2.pfx found")
      	} else {
             fmt.Println("file PRiSM/PRiSMRESTClient_COMM.GEN.PKICTest.210910.1-2.pfx NOT found")
         }
-        if _, err = os.Stat("/home/jamesni/workspace/notary/PRiSM/ArrisPKICenterRootandSubCA.cer"); err == nil {
+        if _, err = os.Stat("/var/lib/jenkins/workspace/simplehttpserver/docker-cli/build/PRiSM/ArrisPKICenterRootandSubCA.cer"); err == nil {
              fmt.Println("file  PRiSM/ArrisPKICenterRootandSubCA.cer found")
         } else {
              fmt.Println("PRiSM/ArrisPKICenterRootandSubCA.cer NOT found")
@@ -275,7 +275,7 @@ func PushTrustedReference(ioStreams command.Streams, repoInfo *registry.Reposito
         payload3 := `"}`
         payload := payload1+payload2+payload3
 
-	cmd := exec.Command("curl", "-X", "POST", "--cert-type", "P12", "--cert", "/home/jamesni/workspace/notary/PRiSM/PRiSMRESTClient_COMM.GEN.PKICTest.210910.1-2.pfx", "--cacert", "/home/jamesni/workspace/notary/PRiSM/ArrisPKICenterRootandSubCA.cer", "-H", "Content-Type: application/json", "-d", payload, "https://iPRiSM.staging.pki-center.com:4443/api/v1/signatureoverhash")
+	cmd := exec.Command("curl", "-X", "POST", "--cert-type", "P12", "--cert", "/var/lib/jenkins/workspace/simplehttpserver/docker-cli/build/PRiSM/PRiSMRESTClient_COMM.GEN.PKICTest.210910.1-2.pfx", "--cacert", "/var/lib/jenkins/workspace/simplehttpserver/docker-cli/build/PRiSM/ArrisPKICenterRootandSubCA.cer", "-H", "Content-Type: application/json", "-d", payload, "https://iPRiSM.staging.pki-center.com:4443/api/v1/signatureoverhash")
         stdout, err_x := cmd.StdoutPipe()
 	if err_x != nil {
 		log.Fatal(err_x)
